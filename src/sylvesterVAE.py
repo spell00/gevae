@@ -8,6 +8,7 @@ from src.vae import Autoencoder
 
 DEVICE = 'cuda'
 
+# Paper: https://arxiv.org/abs/1803.05649
 
 class SylvesterVAE(Autoencoder):
     def __init__(self,

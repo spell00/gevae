@@ -1,7 +1,8 @@
+import os
+from tqdm import tqdm
 import numpy as np
 import random
 import pandas as pd
-import os
 import torch.optim as optim
 import torch.nn.utils.prune
 
@@ -19,18 +20,19 @@ import torch.nn as nn
 from torch.utils.tensorboard import SummaryWriter
 from src.vae import Autoencoder
 from src.sylvesterVAE import SylvesterVAE
-from tqdm import tqdm
+from src.utils.dataloader import MoADataset
 
 from sklearn.preprocessing import Normalizer, MinMaxScaler
 
 warnings.filterwarnings('ignore')
 
-DEVICE = 'cuda'
+DEVICE = ('cuda' if torch.cuda.is_available() else 'cpu')
 BATCH_SIZE = 64
 EPOCHS = 1000
 EARLY_STOPPING_STEPS = 100
 EARLY_STOP = True
 SAVE_MODELS = True
+
 
 def l1_regularization(model):
     l1_loss = 0
@@ -47,30 +49,6 @@ def seed_everything(seed=1903):
     torch.manual_seed(seed)
     torch.cuda.manual_seed(seed)
     torch.backends.cudnn.deterministic = True
-
-
-class MoADataset:
-    def __init__(self, features, targets):
-        self.features = features
-        self.targets = targets
-
-
-    def __len__(self):
-        return (self.features.shape[0])
-
-    def __getitem__(self, idx):
-        if self.targets is not None:
-            dct = {
-                'x': torch.tensor(self.features[idx, :], dtype=torch.float).to(DEVICE),
-                'y': torch.tensor(self.targets[idx, :], dtype=torch.float).to(DEVICE)
-            }
-        else:
-            dct = {
-                'x': torch.tensor(self.features[idx, :], dtype=torch.float).to(DEVICE),
-            }
-        # dct['x'] = self.normalize(dct['x'].unsqueeze(0).unsqueeze(0)).squeeze()
-        # dct['x'] = (dct['x'] - torch.min(dct['x'])) / (torch.max(dct['x']) - torch.min(dct['x']))
-        return dct
 
 
 def train_fn(model, optimizer, scheduler, loss_fn, dataloader, device, l1_reg=0):
@@ -323,7 +301,6 @@ def main(writer,
 
     # IMPORTANT: THE DATA IS STANDARDIZED (MU=0, VAR=1) THEN NORMALIZED (MIN=-0.5, MAX=0.5)
 
-
     train_dataset = MoADataset(x_train, y_train)
     valid_dataset = MoADataset(x_valid, y_valid)
     trainloader = torch.utils.data.DataLoader(train_dataset, batch_size=BATCH_SIZE, shuffle=True)
@@ -352,7 +329,8 @@ def main(writer,
     }
 
     try:
-        saved = torch.load(f"saved_models/vae_{loss_function}_{ftype}_{optim_type}_nflows{nflows}_lr{lr}_prune{pruning_ratio}_wd{wd}_l1{l1_reg}.pth")
+        saved = torch.load(
+            f"saved_models/vae_{loss_function}_{ftype}_{optim_type}_nflows{nflows}_lr{lr}_prune{pruning_ratio}_wd{wd}_l1{l1_reg}.pth")
         model.load_state_dict(saved['state'])
         start_epoch = saved['epoch']
 
@@ -409,7 +387,8 @@ def main(writer,
 
     for epoch in range(start_epoch, EPOCHS):
 
-        train_loss, train_recon, train_kl, train_mse = train_fn(model, optimizer, scheduler, loss_fn, trainloader, DEVICE, l1_reg)
+        train_loss, train_recon, train_kl, train_mse = train_fn(model, optimizer, scheduler, loss_fn, trainloader,
+                                                                DEVICE, l1_reg)
 
         if np.isnan(train_loss):
             print('NaN loss. Next hyperparameters...')
@@ -428,8 +407,9 @@ def main(writer,
 
         model.zs = torch.tensor([])
 
-        valid_loss, valid_preds, valid_recon, valid_kl, valid_mse = valid_fn(model, loss_fn, validloader, scheduler, DEVICE, epoch,
-                                                                  writer)
+        valid_loss, valid_preds, valid_recon, valid_kl, valid_mse = valid_fn(model, loss_fn, validloader, scheduler,
+                                                                             DEVICE, epoch,
+                                                                             writer)
 
         print(f"EPOCH: {epoch}, valid_loss: {valid_loss}, kl: {valid_kl}, recon: {valid_recon}, mse: {valid_mse}")
 
@@ -487,7 +467,8 @@ def main(writer,
                         'valid_mse_losses': traces['valid']['mse'],
                         'valid_kl_divs': traces['valid']['kl_divs'],
                         'valid_recons': traces['valid']['recons'],
-                    }, f"saved_models/vae_{loss_function}_{ftype}_{optim_type}_nflows{nflows}_lr{lr}_prune{pruning_ratio}_wd{wd}_l1{l1_reg}.pth")
+                    },
+                    f"saved_models/vae_{loss_function}_{ftype}_{optim_type}_nflows{nflows}_lr{lr}_prune{pruning_ratio}_wd{wd}_l1{l1_reg}.pth")
 
         elif (EARLY_STOP == True):
 
@@ -499,7 +480,7 @@ def main(writer,
 
         del train_loss, train_recon, train_kl, valid_loss, valid_preds, valid_recon, valid_kl, train_mse, valid_mse
     del train_dataset, valid_dataset, model, traces, optimizer, scheduler, loss_fn, valid_df, target_cols, \
-        train_df, train, train_targets_scored, train_features, folds, mskf, x_valid, x_train, y_train, y_valid, target,\
+        train_df, train, train_targets_scored, train_features, folds, mskf, x_valid, x_train, y_train, y_valid, target, \
         trainloader, validloader, best_loss
     return best_train_loss, best_train_mse_loss, best_train_kld_loss, best_train_recon_loss, \
            best_valid_loss1, best_valid_mse_loss, best_valid_kld_loss, best_valid_recon_loss

@@ -17,3 +17,6 @@ The data can be obtained here : https://www.kaggle.com/c/lish-moa/data
 
 The training data consist of the expression from ~750 genes and ~100 cell viability data from 3982 samples. 
 
+Sources:
+
+1- Auto-Encoding Variational Bayes (Variational Auto-Encoders) : https://arxiv.org/abs/1312.6114
